@@ -15,17 +15,11 @@ LangSpliter 命令行工具
    - **(新功能)** 拆分时将单行列表展平 (不加数字后缀):
      python LangSpliter.py split --flatten-single-lines
 
-2. 合并 JSON 文件为 SNBT 文件 (标准方法):
+2. 合并 JSON 文件为 SNBT 文件:
    - 使用默认路径:
      python LangSpliter.py merge
    - 指定自定义路径:
      python LangSpliter.py merge --json-dir "path/to/json_files" --output-snbt "path/to/zh_cn.snbt"
-
-3. 合并 JSON 文件为 SNBT 文件 (旧版/备用方法):
-   - 使用默认路径:
-     python LangSpliter.py merge-legacy
-   - 指定自定义路径:
-     python LangSpliter.py merge-legacy --json-dir "path/to/json_files" --output-snbt "path/to/zh_cn_legacy.snbt"
 
 要查看所有可用参数，请使用 -h 或 --help:
   python LangSpliter.py -h
