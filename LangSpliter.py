@@ -3,7 +3,7 @@
 LangSpliter 命令行工具
 
 该脚本用于处理 FTB Quests 的 SNBT 语言文件，提供拆分和合并功能。
-所有操作均可通过命令行参数进行控制。
+它既可以作为独立的命令行工具运行，也可以被其他 Python 脚本导入以使用其功能。
 
 --- 使用方法 ---
 
@@ -348,78 +348,6 @@ def process_chapter_quests(chapters_dir, chapters_lang_data, quests_data, tasks_
         except Exception as e:
             print(f"  -> 处理文件 {filename} 时发生错误: {e}")
 
-
-# def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
-#     print(f"--- 2. 开始从 {json_dir} 合并所有 JSON 文件到 SNBT ---")
-#     if not os.path.isdir(json_dir):
-#         print(f"错误：JSON目录 '{json_dir}' 不存在。无法合并。")
-#         return
-#
-#     combined_data = OrderedDict()
-#     json_files = sorted([f for f in os.listdir(json_dir) if f.endswith('.json')])
-#     for filename in json_files:
-#         filepath = os.path.join(json_dir, filename)
-#         try:
-#             with open(filepath, 'r', encoding='utf-8') as f:
-#                 data = json.load(f, object_pairs_hook=OrderedDict)
-#                 combined_data.update(data)
-#                 print(f"  -> 已加载 {len(data)} 条条目从: {filename}")
-#         except Exception as e:
-#             print(f"  -> 警告：读取或解析 {filepath} 失败: {e}")
-#
-#     if not combined_data:
-#         print("错误：没有加载到任何数据，无法生成 SNBT 文件。")
-#         return
-#
-#     print("\n开始重构多行文本条目...")
-#     multi_line_pattern = re.compile(r'^(.*?)(\d+)$')
-#     temp_multiline = OrderedDict()
-#     reconstructed_data = OrderedDict()
-#     for key, value in combined_data.items():
-#         match = multi_line_pattern.match(key)
-#         if match and match.group(1).rstrip('0123456789') == match.group(1):
-#             base_key = match.group(1)
-#             if base_key not in temp_multiline:
-#                 temp_multiline[base_key] = []
-#             temp_multiline[base_key].append((int(match.group(2)), value))
-#         else:
-#             reconstructed_data[key] = value
-#     for base_key, lines_with_nums in temp_multiline.items():
-#         lines_with_nums.sort(key=lambda x: x[0])
-#         reconstructed_data[base_key] = [line_text for _, line_text in lines_with_nums]
-#     print(f"重构完成。原始 {len(combined_data)} 条条目被合并为 {len(reconstructed_data)} 条 SNBT 条目。")
-#
-#     final_ordered_snbt_data = OrderedDict()
-#     processed_bases = set()
-#     for key in combined_data.keys():
-#         match = multi_line_pattern.match(key)
-#         base_key = match.group(1) if match and match.group(1) in reconstructed_data else key
-#         if base_key not in processed_bases and base_key in reconstructed_data:
-#             final_ordered_snbt_data[base_key] = reconstructed_data[base_key]
-#             processed_bases.add(base_key)
-#     print(f"\n总共合并了 {len(final_ordered_snbt_data)} 条最终条目。")
-#
-#     snbt_ready_data = {}
-#     for key, value in final_ordered_snbt_data.items():
-#         if isinstance(value, list):
-#             snbt_ready_data[key] = [escape_string_for_snbt(str(line)) for line in value]
-#         elif isinstance(value, str):
-#             snbt_ready_data[key] = escape_string_for_snbt(value)
-#         else:
-#             snbt_ready_data[key] = value
-#     try:
-#         snbt_output_string = snbtlib.dumps(snbt_ready_data)
-#         if not snbt_output_string.strip():
-#             print("错误：snbtlib.dumps 返回了空字符串！")
-#             return
-#
-#         with open(output_snbt_file, 'w', encoding='utf-8') as f:
-#             f.write(snbt_output_string)
-#     except Exception as e:
-#         print(f"错误：生成或写入 SNBT 文件失败: {e}")
-#
-#     print("--- 合并完成 ---")
-
 def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
     """
     合并所有JSON文件，将 "key1", "key2" 格式的条目还原为列表，
@@ -500,60 +428,58 @@ def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
     print("--- 合并完成 ---")
 
 
-def main():
-    """主函数，用于解析命令行参数并执行相应任务。"""
-    # --- 默认文件路径配置 ---
-    # 这些值将作为命令行参数的默认值
-    DEFAULT_SOURCE_LANG_FILE = "lang/en_us.snbt"
-    DEFAULT_CHAPTER_GROUPS_FILE = "chapter_groups.snbt"
-    DEFAULT_CHAPTERS_DIR = "chapters"
-    DEFAULT_JSON_OUTPUT_DIR = "output_json"
-    DEFAULT_MERGED_SNBT_FILE = "lang/zh_cn.snbt"
-
-    parser = argparse.ArgumentParser(description="FTB Quests 语言文件拆分与合并工具。")
-    subparsers = parser.add_subparsers(dest='task', required=True,
-                                       help='选择要执行的任务: split (拆分), merge (合并)')
-
-    # --- 拆分任务的参数 ---
-    parser_split = subparsers.add_parser('split', help='将源 SNBT 语言文件拆分为多个 JSON 文件。')
-    parser_split.add_argument('--source-lang', default=DEFAULT_SOURCE_LANG_FILE,
-                              help=f'指定源语言 SNBT 文件的路径。默认: {DEFAULT_SOURCE_LANG_FILE}')
-    parser_split.add_argument('--chapters-dir', default=DEFAULT_CHAPTERS_DIR,
-                              help=f'指定包含章节定义的 SNBT 文件的目录。默认: {DEFAULT_CHAPTERS_DIR}')
-    parser_split.add_argument('--chapter-groups', default=DEFAULT_CHAPTER_GROUPS_FILE,
-                              help=f'指定章节组定义文件的路径。默认: {DEFAULT_CHAPTER_GROUPS_FILE}')
-    parser_split.add_argument('--output-dir', default=DEFAULT_JSON_OUTPUT_DIR,
-                              help=f'指定输出 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
-    parser_split.add_argument(
-        '--flatten-single-lines',
-        action='store_true',
-        help='当 SNBT 列表只有一个元素时，将其展平为不带数字后缀的键值对。'
-    )
-
-    # --- 合并任务的参数 (标准逻辑) ---
-    parser_merge = subparsers.add_parser('merge', help='将多个 JSON 文件合并为一个 SNBT 语言文件。')
-    parser_merge.add_argument('--json-dir', default=DEFAULT_JSON_OUTPUT_DIR,
-                              help=f'指定包含 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
-    parser_merge.add_argument('--output-snbt', default=DEFAULT_MERGED_SNBT_FILE,
-                              help=f'指定最终输出的 SNBT 文件的路径。默认: {DEFAULT_MERGED_SNBT_FILE}')
-
-    args = parser.parse_args()
-
-    # --- 根据任务分派 ---
-    if args.task == 'split':
-        split_and_process_all(
-            source_lang_file=args.source_lang,
-            chapters_dir=args.chapters_dir,
-            chapter_groups_file=args.chapter_groups,
-            output_dir=args.output_dir,
-            flatten_single_lines=args.flatten_single_lines  # 传递新参数
-        )
-    elif args.task == 'merge':
-        merge_all_to_snbt(
-            json_dir=args.json_dir,
-            output_snbt_file=args.output_snbt
-        )
-
-
 if __name__ == "__main__":
-    main()
+    def main_cli():
+        """主函数，用于解析命令行参数并执行相应任务。"""
+        # --- 默认文件路径配置 ---
+        DEFAULT_SOURCE_LANG_FILE = "lang/en_us.snbt"
+        DEFAULT_CHAPTER_GROUPS_FILE = "chapter_groups.snbt"
+        DEFAULT_CHAPTERS_DIR = "chapters"
+        DEFAULT_JSON_OUTPUT_DIR = "output_json"
+        DEFAULT_MERGED_SNBT_FILE = "lang/zh_cn.snbt"
+
+        parser = argparse.ArgumentParser(description="FTB Quests 语言文件拆分与合并工具。")
+        subparsers = parser.add_subparsers(dest='task', required=True,
+                                           help='选择要执行的任务: split (拆分), merge (合并)')
+
+        # --- 拆分任务的参数 ---
+        parser_split = subparsers.add_parser('split', help='将源 SNBT 语言文件拆分为多个 JSON 文件。')
+        parser_split.add_argument('--source-lang', default=DEFAULT_SOURCE_LANG_FILE,
+                                  help=f'指定源语言 SNBT 文件的路径。默认: {DEFAULT_SOURCE_LANG_FILE}')
+        parser_split.add_argument('--chapters-dir', default=DEFAULT_CHAPTERS_DIR,
+                                  help=f'指定包含章节定义的 SNBT 文件的目录。默认: {DEFAULT_CHAPTERS_DIR}')
+        parser_split.add_argument('--chapter-groups', default=DEFAULT_CHAPTER_GROUPS_FILE,
+                                  help=f'指定章节组定义文件的路径。默认: {DEFAULT_CHAPTER_GROUPS_FILE}')
+        parser_split.add_argument('--output-dir', default=DEFAULT_JSON_OUTPUT_DIR,
+                                  help=f'指定输出 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
+        parser_split.add_argument(
+            '--flatten-single-lines',
+            action='store_true',
+            help='当 SNBT 列表只有一个元素时，将其展平为不带数字后缀的键值对。'
+        )
+
+        # --- 合并任务的参数 (标准逻辑) ---
+        parser_merge = subparsers.add_parser('merge', help='将多个 JSON 文件合并为一个 SNBT 语言文件。')
+        parser_merge.add_argument('--json-dir', default=DEFAULT_JSON_OUTPUT_DIR,
+                                  help=f'指定包含 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
+        parser_merge.add_argument('--output-snbt', default=DEFAULT_MERGED_SNBT_FILE,
+                                  help=f'指定最终输出的 SNBT 文件的路径。默认: {DEFAULT_MERGED_SNBT_FILE}')
+
+        args = parser.parse_args()
+
+        # --- 根据任务分派 ---
+        if args.task == 'split':
+            split_and_process_all(
+                source_lang_file=args.source_lang,
+                chapters_dir=args.chapters_dir,
+                chapter_groups_file=args.chapter_groups,
+                output_dir=args.output_dir,
+                flatten_single_lines=args.flatten_single_lines
+            )
+        elif args.task == 'merge':
+            merge_all_to_snbt(
+                json_dir=args.json_dir,
+                output_snbt_file=args.output_snbt
+            )
+
+    main_cli()
