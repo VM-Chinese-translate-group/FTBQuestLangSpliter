@@ -1,17 +1,46 @@
+# -*- coding: utf-8 -*-
+"""
+LangSpliter 命令行工具
+
+该脚本用于处理 FTB Quests 的 SNBT 语言文件，提供拆分和合并功能。
+所有操作均可通过命令行参数进行控制。
+
+--- 使用方法 ---
+
+1. 拆分 SNBT 文件为多个 JSON 文件:
+   - 使用默认路径 (标准行为):
+     python LangSpliter.py split
+   - 指定自定义路径:
+     python LangSpliter.py split --source-lang "path/to/en_us.snbt" --output-dir "path/to/output"
+   - **(新功能)** 拆分时将单行列表展平 (不加数字后缀):
+     python LangSpliter.py split --flatten-single-lines
+
+2. 合并 JSON 文件为 SNBT 文件 (标准方法):
+   - 使用默认路径:
+     python LangSpliter.py merge
+   - 指定自定义路径:
+     python LangSpliter.py merge --json-dir "path/to/json_files" --output-snbt "path/to/zh_cn.snbt"
+
+3. 合并 JSON 文件为 SNBT 文件 (旧版/备用方法):
+   - 使用默认路径:
+     python LangSpliter.py merge-legacy
+   - 指定自定义路径:
+     python LangSpliter.py merge-legacy --json-dir "path/to/json_files" --output-snbt "path/to/zh_cn_legacy.snbt"
+
+要查看所有可用参数，请使用 -h 或 --help:
+  python LangSpliter.py -h
+  python LangSpliter.py split -h
+  python LangSpliter.py merge -h
+"""
+
 import os
 import json
 import re
 import snbtlib
+import argparse
 from collections import OrderedDict
 
 # --- Author: Maxing ---
-
-# --- 配置 ---
-SOURCE_LANG_FILE = "lang\en_us.snbt"
-CHAPTER_GROUPS_FILE = "chapter_groups.snbt"
-CHAPTERS_DIR = "chapters"
-JSON_OUTPUT_DIR = "output_json"
-MERGED_SNBT_FILE = "lang\zh_cn.snbt"
 
 # --- 拆分逻辑配置 ---
 CATEGORIES_TO_FILES = {
@@ -48,11 +77,14 @@ def escape_string_for_snbt(s: str) -> str:
     return s
 
 
-def split_and_process_all(source_lang_file, chapters_dir, chapter_groups_file, output_dir):
+def split_and_process_all(source_lang_file, chapters_dir, chapter_groups_file, output_dir, flatten_single_lines: bool):
     """
     一个完整的处理流程，现在会将 chapter.* 条目分发到对应的章节文件中。
+    新增 flatten_single_lines 参数用于控制单行列表的处理方式。
     """
     print(f"--- 1. 开始拆分和处理 {source_lang_file} ---")
+    if flatten_single_lines:
+        print("  -> 已启用【单行列表展平】模式。")
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. 加载源语言文件
@@ -63,15 +95,17 @@ def split_and_process_all(source_lang_file, chapters_dir, chapter_groups_file, o
         lang_data = OrderedDict()
         for key, value in snbt_data.items():
             if isinstance(value, list):
-                # 如果需要单行语言文件不带序列号，请取消下面的注释
-                # if len(value) == 1:
-                #     processed_line = unescape_string(str(value[0]))
-                #     lang_data[key] = processed_line
-                # else:
-                for i, line in enumerate(value, 1):
-                    new_key = f"{key}{i}"
-                    processed_line = unescape_string(str(line))
-                    lang_data[new_key] = processed_line
+                # 根据命令行参数选择处理逻辑
+                if flatten_single_lines and len(value) == 1:
+                    # 如果开启了展平功能，且列表只有一个元素，则不加数字后缀
+                    processed_line = unescape_string(str(value[0]))
+                    lang_data[key] = processed_line
+                else:
+                    # 默认行为：为所有行（或当展平功能关闭时）添加数字后缀
+                    for i, line in enumerate(value, 1):
+                        new_key = f"{key}{i}"
+                        processed_line = unescape_string(str(line))
+                        lang_data[new_key] = processed_line
             elif isinstance(value, str):
                 processed_value = unescape_string(value)
                 lang_data[key] = processed_value
@@ -158,9 +192,9 @@ def create_sort_key(item, config, task_to_quest_map, reward_to_quest_map):
     key, _ = item
 
     # 初始化默认值
-    is_chapter_key = 1          # 默认为任务级条目
-    quest_group_id = key        # 默认分组ID为键本身，用于未匹配情况
-    internal_type_priority = 99 # 默认为一个较大的数
+    is_chapter_key = 1  # 默认为任务级条目
+    quest_group_id = key  # 默认分组ID为键本身，用于未匹配情况
+    internal_type_priority = 99  # 默认为一个较大的数
     custom_priority = 99
     key_prefix_for_config = ''
 
@@ -168,31 +202,31 @@ def create_sort_key(item, config, task_to_quest_map, reward_to_quest_map):
     if key.startswith('chapter.'):
         match = re.match(r'^chapter\.([0-9A-F]+)', key)
         if match:
-            is_chapter_key = 0 # 这是章节级条目，优先级最高
+            is_chapter_key = 0  # 这是章节级条目，优先级最高
             quest_group_id = match.group(1)
             internal_type_priority = 0
             key_prefix_for_config = 'chapter.'
     elif key.startswith('quest.'):
         match = re.match(r'^quest\.([0-9A-F]+)', key)
         if match:
-            is_chapter_key = 1 # 这是任务级条目
-            quest_group_id = match.group(1) # 分组ID就是它自己的ID
-            internal_type_priority = 0 # 在任务组内，quest本身排第一
+            is_chapter_key = 1  # 这是任务级条目
+            quest_group_id = match.group(1)  # 分组ID就是它自己的ID
+            internal_type_priority = 0  # 在任务组内，quest本身排第一
             key_prefix_for_config = 'quest.'
     elif key.startswith('task.'):
         match = re.match(r'^task\.([0-9A-F]+)', key)
         if match:
             task_id = match.group(1)
             is_chapter_key = 1
-            quest_group_id = task_to_quest_map.get(task_id, task_id) # 分组ID是其父任务的ID
-            internal_type_priority = 1 # 在任务组内，task排第二
+            quest_group_id = task_to_quest_map.get(task_id, task_id)  # 分组ID是其父任务的ID
+            internal_type_priority = 1  # 在任务组内，task排第二
     elif key.startswith('reward.'):
         match = re.match(r'^reward\.([0-9A-F]+)', key)
         if match:
             reward_id = match.group(1)
             is_chapter_key = 1
-            quest_group_id = reward_to_quest_map.get(reward_id, reward_id) # 分组ID是其父任务的ID
-            internal_type_priority = 2 # 在任务组内，reward排第三
+            quest_group_id = reward_to_quest_map.get(reward_id, reward_id)  # 分组ID是其父任务的ID
+            internal_type_priority = 2  # 在任务组内，reward排第三
 
     # 2. 计算自定义优先级
     if key_prefix_for_config and key_prefix_for_config in config:
@@ -417,7 +451,6 @@ def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
     multi_line_pattern = re.compile(r'^(.*?)(\d+)$')
 
     temp_multiline = OrderedDict()
-
     reconstructed_data = OrderedDict()
 
     for key, value in combined_data.items():
@@ -457,6 +490,7 @@ def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
             print("错误：snbtlib.dumps 返回了空字符串！")
             return
 
+        os.makedirs(os.path.dirname(output_snbt_file), exist_ok=True)
         with open(output_snbt_file, 'w', encoding='utf-8') as f:
             f.write(snbt_output_string)
         print(f"成功将所有条目合并并写入到: {output_snbt_file}")
@@ -466,11 +500,60 @@ def merge_all_to_snbt(json_dir: str, output_snbt_file: str):
     print("--- 合并完成 ---")
 
 
+def main():
+    """主函数，用于解析命令行参数并执行相应任务。"""
+    # --- 默认文件路径配置 ---
+    # 这些值将作为命令行参数的默认值
+    DEFAULT_SOURCE_LANG_FILE = "lang/en_us.snbt"
+    DEFAULT_CHAPTER_GROUPS_FILE = "chapter_groups.snbt"
+    DEFAULT_CHAPTERS_DIR = "chapters"
+    DEFAULT_JSON_OUTPUT_DIR = "output_json"
+    DEFAULT_MERGED_SNBT_FILE = "lang/zh_cn.snbt"
+
+    parser = argparse.ArgumentParser(description="FTB Quests 语言文件拆分与合并工具。")
+    subparsers = parser.add_subparsers(dest='task', required=True,
+                                       help='选择要执行的任务: split (拆分), merge (合并)')
+
+    # --- 拆分任务的参数 ---
+    parser_split = subparsers.add_parser('split', help='将源 SNBT 语言文件拆分为多个 JSON 文件。')
+    parser_split.add_argument('--source-lang', default=DEFAULT_SOURCE_LANG_FILE,
+                              help=f'指定源语言 SNBT 文件的路径。默认: {DEFAULT_SOURCE_LANG_FILE}')
+    parser_split.add_argument('--chapters-dir', default=DEFAULT_CHAPTERS_DIR,
+                              help=f'指定包含章节定义的 SNBT 文件的目录。默认: {DEFAULT_CHAPTERS_DIR}')
+    parser_split.add_argument('--chapter-groups', default=DEFAULT_CHAPTER_GROUPS_FILE,
+                              help=f'指定章节组定义文件的路径。默认: {DEFAULT_CHAPTER_GROUPS_FILE}')
+    parser_split.add_argument('--output-dir', default=DEFAULT_JSON_OUTPUT_DIR,
+                              help=f'指定输出 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
+    parser_split.add_argument(
+        '--flatten-single-lines',
+        action='store_true',
+        help='当 SNBT 列表只有一个元素时，将其展平为不带数字后缀的键值对。'
+    )
+
+    # --- 合并任务的参数 (标准逻辑) ---
+    parser_merge = subparsers.add_parser('merge', help='将多个 JSON 文件合并为一个 SNBT 语言文件。')
+    parser_merge.add_argument('--json-dir', default=DEFAULT_JSON_OUTPUT_DIR,
+                              help=f'指定包含 JSON 文件的目录。默认: {DEFAULT_JSON_OUTPUT_DIR}')
+    parser_merge.add_argument('--output-snbt', default=DEFAULT_MERGED_SNBT_FILE,
+                              help=f'指定最终输出的 SNBT 文件的路径。默认: {DEFAULT_MERGED_SNBT_FILE}')
+
+    args = parser.parse_args()
+
+    # --- 根据任务分派 ---
+    if args.task == 'split':
+        split_and_process_all(
+            source_lang_file=args.source_lang,
+            chapters_dir=args.chapters_dir,
+            chapter_groups_file=args.chapter_groups,
+            output_dir=args.output_dir,
+            flatten_single_lines=args.flatten_single_lines  # 传递新参数
+        )
+    elif args.task == 'merge':
+        merge_all_to_snbt(
+            json_dir=args.json_dir,
+            output_snbt_file=args.output_snbt
+        )
+
+
 if __name__ == "__main__":
-    # 使用哪个功能，就取消哪一行的注释
-
-    # 步骤 1: 执行拆分和处理
-    split_and_process_all(SOURCE_LANG_FILE, CHAPTERS_DIR, CHAPTER_GROUPS_FILE, JSON_OUTPUT_DIR)
-
-    # 步骤 2: 执行合并
-    merge_all_to_snbt(JSON_OUTPUT_DIR, MERGED_SNBT_FILE)
+    main()
